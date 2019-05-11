@@ -5,8 +5,10 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-crc = "1"
+bytecodec = "0.4"
 byteorder = "1"
+crc = "1"
+protobuf_codec = "0.2"
 serde_json = "1"
 structopt = "0.2"
 trackable = "0.2"
