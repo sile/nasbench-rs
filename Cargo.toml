@@ -5,6 +5,7 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+base64 = "0.10"
 bytecodec = "0.4"
 byteorder = "1"
 crc = "1"

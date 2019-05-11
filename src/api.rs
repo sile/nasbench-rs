@@ -1,32 +1,65 @@
+use crate::model::{DataPoint, EvalStats, ModelSpec, ModelStats, Op};
+use crate::protobuf::{ModelMetrics, ModelMetricsDecoder};
 use crate::tfrecord::TfRecordStream;
 use crate::Result;
+use base64;
+use bytecodec::DecodeExt;
 use serde_json::{self, Value as JsonValue};
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::u128;
-use trackable::error::Failed;
+use trackable::error::{ErrorKindExt, Failed};
 
 #[derive(Debug)]
-pub struct NasBench {}
+pub struct NasBench {
+    valid_epochs: HashSet<u8>,
+    models: HashMap<ModelSpec, ModelStats>,
+}
 impl NasBench {
     pub fn from_tfrecord_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let mut valid_epochs = HashSet::new();
+        let mut models = HashMap::<_, ModelStats>::new();
+
         let file = track_any_err!(File::open(&path); path.as_ref())?;
         for record in TfRecordStream::new(BufReader::new(file)) {
             let record = track!(record)?;
             let json: Vec<JsonValue> = track_any_err!(serde_json::from_slice(&record.data))?;
             let record = track!(RawRecord::from_json(json))?;
+
+            valid_epochs.insert(record.epochs);
+
+            let mut model = models.entry(record.spec.clone()).or_default();
+            model.trainable_parameters = record.metrics.trainable_parameters as u32;
+
+            let data_point = DataPoint {
+                halfway: EvalStats::from(record.metrics.evaluation_data_list[1].clone()),
+                complete: EvalStats::from(record.metrics.evaluation_data_list[2].clone()),
+            };
+            model
+                .epochs
+                .entry(record.epochs)
+                .or_default()
+                .push(data_point);
         }
-        panic!()
+
+        Ok(Self {
+            valid_epochs,
+            models,
+        })
     }
+
+    // pub fn is_valid(&self, model_spec:&ModelSpec);
+    // pub fn query(&self, model_spec: &ModelSpec, epochs: usize, stop_halfway:bool) {}
 }
 
 #[derive(Debug)]
 struct RawRecord {
     module_hash: u128,
     epochs: u8,
-    adjacency: Vec<Vec<bool>>,
-    operations: Vec<Op>,
+    spec: ModelSpec,
+    metrics: ModelMetrics,
 }
 impl RawRecord {
     fn from_json(array: Vec<JsonValue>) -> Result<Self> {
@@ -66,22 +99,19 @@ impl RawRecord {
         }
 
         // metrics
-        let raw_metrics = track_assert_some!(array[4].as_str(), Failed);
+        let raw_metrics = track_assert_some!(array[4].as_str(), Failed).replace('\n', "");
+        let raw_metrics_bytes = track_any_err!(base64::decode(&raw_metrics); raw_metrics)?;
+        let metrics = track!(ModelMetricsDecoder::default().decode_from_bytes(&raw_metrics_bytes))
+            .map_err(|e| Failed.takes_over(e))?;
 
         Ok(Self {
             module_hash,
             epochs,
-            adjacency,
-            operations,
+            spec: ModelSpec {
+                adjacency,
+                operations,
+            },
+            metrics,
         })
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Op {
-    Input,
-    Conv1x1,
-    Conv3x3,
-    MaxPool3x3,
-    Output,
 }

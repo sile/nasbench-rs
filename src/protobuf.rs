@@ -4,7 +4,7 @@ use protobuf_codec::field::{FieldDecoder, Fields, MaybeDefault, MessageFieldDeco
 use protobuf_codec::message::MessageDecoder;
 use protobuf_codec::scalar::{DoubleDecoder, Int32Decoder, StringDecoder};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModelMetrics {
     /// Metrics that are evaluated at each checkpoint.
     ///
@@ -22,7 +22,7 @@ pub struct ModelMetrics {
     pub total_time: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EvaluationData {
     /// Current epoch at the time of this evaluation.
     pub current_epoch: f64,
@@ -33,13 +33,13 @@ pub struct EvaluationData {
     pub training_time: f64,
 
     /// Accuracy on a fixed 10,000 images from the train set.
-    pub train_accurary: f64,
+    pub train_accuracy: f64,
 
     /// Accuracy on a held-out validation set of 10,000 images.
-    pub validation_accurary: f64,
+    pub validation_accuracy: f64,
 
     /// Accuracy on the test set of 10,000 images.
-    pub test_accurary: f64,
+    pub test_accuracy: f64,
 
     /// Location of checkpoint file.
     ///
@@ -118,9 +118,9 @@ impl_message_decode!(EvaluationDataDecoder, EvaluationData, |t: (
     EvaluationData {
         current_epoch: t.0,
         training_time: t.1,
-        train_accurary: t.2,
-        validation_accurary: t.3,
-        test_accurary: t.4,
+        train_accuracy: t.2,
+        validation_accuracy: t.3,
+        test_accuracy: t.4,
         checkpoint_path: t.5
     }
 ));
