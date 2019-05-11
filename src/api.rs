@@ -7,7 +7,7 @@ use bytecodec::DecodeExt;
 use serde_json::{self, Value as JsonValue};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::path::Path;
 use std::u128;
 use trackable::error::{ErrorKindExt, Failed};
@@ -50,8 +50,17 @@ impl NasBench {
         })
     }
 
+    pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+        for (spec, stats) in &self.models {
+            track!(spec.to_writer(&mut writer))?;
+            track!(stats.to_writer(&mut writer))?;
+        }
+        Ok(())
+    }
+
     // pub fn is_valid(&self, model_spec:&ModelSpec);
-    // pub fn query(&self, model_spec: &ModelSpec, epochs: usize, stop_halfway:bool) {}
+    // pub fn query(&self, model_spec: &ModelSpec, epochs: usize, stop_halfway:bool, TODO: sample_index) {}
+    //
 }
 
 #[derive(Debug)]
