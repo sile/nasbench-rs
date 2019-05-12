@@ -3,6 +3,16 @@ name = "nasbench"
 version = "0.1.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 edition = "2018"
+description = "A Rust port of NASBench: https://github.com/google-research/nasbench"
+homepage = "https://github.com/sile/nasbench"
+repository = "https://github.com/sile/nasbench"
+readme = "README.md"
+keywords = ["neural-architecture-search", "benchmark-datasets"]
+license = "MIT"
+
+[badges]
+travis-ci = {repository = "sile/nasbench"}
+codecov = {repository = "sile/nasbench"}
 
 [dependencies]
 base64 = "0.10"
