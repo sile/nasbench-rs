@@ -180,9 +180,9 @@ impl FromStr for AdjacencyMatrix {
         track_assert_eq!(dim * dim, s.len(), Failed, "Not a matrix: {:?}", s);
 
         let mut matrix = vec![vec![false; dim]; dim];
-        for i in 0..dim {
-            for j in 0..dim {
-                matrix[i][j] = s.as_bytes()[i * dim + j] == '1' as u8;
+        for (i, row) in matrix.iter_mut().enumerate() {
+            for (j, v) in row.iter_mut().enumerate() {
+                *v = s.as_bytes()[i * dim + j] == b'1';
             }
         }
 
