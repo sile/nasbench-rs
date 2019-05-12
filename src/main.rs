@@ -1,8 +1,7 @@
 #[macro_use]
 extern crate trackable;
 
-use nasbench::model::{AdjacencyMatrix, ModelSpec, Op};
-use nasbench::NasBench;
+use nasbench::{AdjacencyMatrix, ModelSpec, NasBench, Op};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
@@ -63,14 +62,14 @@ fn main() -> MainResult {
             let model_spec = ModelSpec { ops, adjacency };
             let model_stats =
                 track_assert_some!(nasbench.models().get(&model_spec), Failed, "Unknown model");
-            let epoch_stats =
+            let epoch_stats_list =
                 track_assert_some!(model_stats.epochs.get(&epochs), Failed, "Unknown epochs");
-            let data_point =
-                track_assert_some!(epoch_stats.get(sample_index), Failed, "Out of range");
+            let epoch_stats =
+                track_assert_some!(epoch_stats_list.get(sample_index), Failed, "Out of range");
             if stop_halfway {
-                println!("{:?}", data_point.halfway);
+                println!("{:?}", epoch_stats.halfway);
             } else {
-                println!("{:?}", data_point.complete);
+                println!("{:?}", epoch_stats.complete);
             }
         }
     }

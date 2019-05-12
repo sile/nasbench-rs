@@ -1,4 +1,4 @@
-use crate::model::{DataPoint, EvalStats, ModelSpec, ModelStats};
+use crate::model::{EpochStats, EvaluationMetrics, ModelSpec, ModelStats};
 use crate::protobuf::{ModelMetrics, ModelMetricsDecoder};
 use crate::tfrecord::TfRecordStream;
 use crate::Result;
@@ -74,15 +74,15 @@ impl NasBench {
             let mut model = models.entry(record.spec.clone()).or_default();
             model.trainable_parameters = record.metrics.trainable_parameters as u32;
 
-            let data_point = DataPoint {
-                halfway: EvalStats::from(record.metrics.evaluation_data_list[1].clone()),
-                complete: EvalStats::from(record.metrics.evaluation_data_list[2].clone()),
+            let epoch_stats = EpochStats {
+                halfway: EvaluationMetrics::from(record.metrics.evaluation_data_list[1].clone()),
+                complete: EvaluationMetrics::from(record.metrics.evaluation_data_list[2].clone()),
             };
             model
                 .epochs
                 .entry(record.epochs)
                 .or_default()
-                .push(data_point);
+                .push(epoch_stats);
         }
 
         Ok(Self { models })

@@ -1,6 +1,14 @@
-//! A Rust port of [NASBench].
+//! A Rust port of [google-research/nasbench][NASBench].
 //!
 //! [NASBench]: https://github.com/google-research/nasbench
+//!
+//! # Motivations
+//!
+//! # Limitations
+//!
+//! # Examples
+//!
+//! TODO
 //!
 //! # References
 //!
@@ -11,10 +19,10 @@
 extern crate trackable;
 
 pub use self::dataset::NasBench;
-
-pub mod model;
+pub use self::model::{AdjacencyMatrix, EpochStats, EvaluationMetrics, ModelSpec, ModelStats, Op};
 
 mod dataset;
+mod model;
 mod protobuf;
 mod tfrecord;
 
