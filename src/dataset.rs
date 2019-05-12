@@ -63,7 +63,7 @@ impl NasBench {
     /// See [Download the dataset] for available dataset.
     ///
     /// [Download the dataset]: https://github.com/google-research/nasbench#download-the-dataset
-    pub fn from_tfrecord_reader<R: Read>(mut reader: R) -> Result<Self> {
+    pub fn from_tfrecord_reader<R: Read>(reader: R) -> Result<Self> {
         let mut models = HashMap::<_, ModelStats>::new();
 
         for record in TfRecordStream::new(reader) {
@@ -137,10 +137,10 @@ impl NasBenchRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use trackable::result::TestResult;
+    use trackable::result::TopLevelResult;
 
     #[test]
-    fn nasbench_works() -> TestResult {
+    fn nasbench_works() -> TopLevelResult {
         let tfrecord_bytes = [
             145, 1, 0, 0, 0, 0, 0, 0, 0x98, 0x25, 0xed, 0x9b, 91, 34, 48, 48, 48, 48, 53, 99, 49,
             52, 50, 101, 54, 102, 52, 56, 97, 99, 55, 52, 102, 100, 99, 102, 55, 51, 101, 51, 52,
@@ -167,7 +167,7 @@ mod tests {
         let nasbench0 = track!(NasBench::from_tfrecord_reader(&tfrecord_bytes[..]))?;
 
         let mut bytes = Vec::new();
-        track!(nasbench0.to_writer(&mut bytes));
+        track!(nasbench0.to_writer(&mut bytes))?;
         let nasbench1 = track!(NasBench::from_reader(&bytes[..]))?;
 
         assert_eq!(nasbench0.models(), nasbench1.models());
