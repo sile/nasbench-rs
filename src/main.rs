@@ -12,12 +12,15 @@ use trackable::result::MainResult;
 #[derive(Debug, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 enum Opt {
+    #[structopt(about = "Converts tfrecord format dataset to more compact binary format")]
     Convert {
-        tfrecord_format_dataset: PathBuf,
-        binary_format_dataset: PathBuf,
+        tfrecord_format_dataset_path: PathBuf,
+        binary_format_dataset_path: PathBuf,
     },
+
+    #[structopt(about = "Queris evaluation metrics of a model")]
     Query {
-        dataset: PathBuf,
+        dataset_path: PathBuf,
 
         #[structopt(long, default_value = "108")]
         epochs: u8,
@@ -40,25 +43,24 @@ fn main() -> MainResult {
     let opt = Opt::from_args();
     match opt {
         Opt::Convert {
-            tfrecord_format_dataset,
-            binary_format_dataset,
+            tfrecord_format_dataset_path,
+            binary_format_dataset_path,
         } => {
-            let file =
-                track_any_err!(File::open(&tfrecord_format_dataset); tfrecord_format_dataset)?;
+            let file = track_any_err!(File::open(&tfrecord_format_dataset_path); tfrecord_format_dataset_path)?;
             let nasbench = track!(NasBench::from_tfrecord_reader(BufReader::new(file)))?;
 
-            let file = track_any_err!(File::create(binary_format_dataset))?;
+            let file = track_any_err!(File::create(binary_format_dataset_path))?;
             track!(nasbench.to_writer(BufWriter::new(file)))?
         }
         Opt::Query {
-            dataset,
+            dataset_path,
             epochs,
             ops,
             adjacency,
             stop_halfway,
             sample_index,
         } => {
-            let nasbench = track!(NasBench::new(dataset))?;
+            let nasbench = track!(NasBench::new(dataset_path))?;
             let model_spec = ModelSpec { ops, adjacency };
             let model_stats =
                 track_assert_some!(nasbench.models().get(&model_spec), Failed, "Unknown model");
