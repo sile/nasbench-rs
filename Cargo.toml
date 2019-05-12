@@ -7,7 +7,7 @@ description = "A Rust port of NASBench: https://github.com/google-research/nasbe
 homepage = "https://github.com/sile/nasbench"
 repository = "https://github.com/sile/nasbench"
 readme = "README.md"
-keywords = ["neural-architecture-search", "benchmark-datasets"]
+keywords = ["nas", "benchmark-datasets"]
 license = "MIT"
 
 [badges]
