@@ -79,6 +79,7 @@ macro_rules! impl_message_decode {
 }
 
 #[derive(Debug, Default)]
+#[allow(clippy::type_complexity)]
 pub struct ModelMetricsDecoder {
     inner: MessageDecoder<
         Fields<(
@@ -97,6 +98,7 @@ impl_message_decode!(ModelMetricsDecoder, ModelMetrics, |t: (_, _, _)| {
 });
 
 #[derive(Debug, Default)]
+#[allow(clippy::type_complexity)]
 pub struct EvaluationDataDecoder {
     inner: MessageDecoder<
         Fields<(
@@ -132,10 +134,10 @@ mod tests {
     use super::*;
     use base64;
     use bytecodec::DecodeExt;
-    use trackable::result::TestResult;
+    use trackable::result::TopLevelResult;
 
     #[test]
-    fn decoder_works() -> TestResult {
+    fn decoder_works() -> TopLevelResult {
         let base64_bytes = "Ci0JAAAAAAAAAAARAAAAAAAAAAAZAAAAoKqquT8hAAAAYJAGuT8pAAAAAGmQuT8KLQkAAAAAAAAAQBEAAADAdJNGQBkAAABgkAa6PyEAAAAg3/K6PykAAACAy7e6PwotCQAAAAAAABBAEQAAACDbeVZAGQAAAEAaZNY/IQAAAGBVVdY/KQAAAODybdY/EIqYigQZAABAhznbeUA=";
         let bytes = track_any_err!(base64::decode(&base64_bytes))?;
 
