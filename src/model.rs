@@ -112,24 +112,68 @@ impl DataPoint {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AdjacencyMatrix {
+    triangular_matrix: Vec<bool>,
+}
+impl AdjacencyMatrix {
+    pub fn new(matrix: Vec<Vec<bool>>) -> Result<Self> {
+        track_assert!(!matrix.is_empty(), Failed);
+        let dim = matrix.len();
+        let mut triangular_matrix = Vec::with_capacity((1..dim).sum());
+        for (i, row) in matrix.into_iter().enumerate() {
+            track_assert_eq!(row.len(), dim, Failed);
+
+            for (j, adjacent) in row.into_iter().enumerate() {
+                if j <= i {
+                    track_assert!(!adjacent, Failed; i, j);
+                    continue;
+                }
+                triangular_matrix.push(adjacent);
+            }
+        }
+        Ok(Self { triangular_matrix })
+    }
+
+    pub fn dimension(&self) -> usize {
+        let mut n = 0;
+        for dim in 1.. {
+            if n >= self.triangular_matrix.len() {
+                return dim;
+            }
+            n += dim;
+        }
+        unreachable!();
+    }
+
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
+        let len = track_any_err!(reader.read_u8())? as usize;
+        let mut triangular_matrix = Vec::with_capacity(len);
+        for _ in 0..len {
+            triangular_matrix.push(track_any_err!(reader.read_u8())? == 1);
+        }
+        Ok(Self { triangular_matrix })
+    }
+
+    pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+        let len = self.triangular_matrix.len();
+        track_any_err!(writer.write_u8(len as u8))?;
+        for &b in &self.triangular_matrix {
+            track_any_err!(writer.write_u8(b as u8))?;
+        }
+        Ok(())
+    }
+}
+
 // a.k.a. module
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModelSpec {
-    pub adjacency: Vec<Vec<bool>>, // TODO: AdjacencyMatrix (upper triangular)
     pub operations: Vec<Op>,
+    pub adjacency: AdjacencyMatrix,
 }
 impl ModelSpec {
-    // pub fn new() -> Result<Self> {
-    // }
-
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
-        let dim = track_any_err!(reader.read_u8())? as usize;
-        let mut adjacency = vec![vec![false; dim]; dim];
-        for i in 0..dim {
-            for j in 0..dim {
-                adjacency[i][j] = track_any_err!(reader.read_u8())? == 1;
-            }
-        }
+        let adjacency = track!(AdjacencyMatrix::from_reader(&mut reader))?;
 
         let len = track_any_err!(reader.read_u8())? as usize;
         let mut operations = Vec::with_capacity(len);
@@ -152,13 +196,7 @@ impl ModelSpec {
     }
 
     pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
-        let dim = self.adjacency.len();
-        track_any_err!(writer.write_u8(dim as u8))?;
-        for i in 0..dim {
-            for j in 0..dim {
-                track_any_err!(writer.write_u8(self.adjacency[i][j] as u8))?;
-            }
-        }
+        track!(self.adjacency.to_writer(&mut writer))?;
 
         track_any_err!(writer.write_u8(self.operations.len() as u8))?;
         for op in &self.operations {

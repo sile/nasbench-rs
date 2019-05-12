@@ -1,4 +1,4 @@
-use crate::model::{DataPoint, EvalStats, ModelSpec, ModelStats};
+use crate::model::{AdjacencyMatrix, DataPoint, EvalStats, ModelSpec, ModelStats};
 use crate::protobuf::{ModelMetrics, ModelMetricsDecoder};
 use crate::tfrecord::TfRecordStream;
 use crate::Result;
@@ -107,6 +107,7 @@ impl RawRecord {
                 adjacency[i][j] = raw_adjacency.as_bytes()[i * dim + j] == '1' as u8;
             }
         }
+        let adjacency = track!(AdjacencyMatrix::new(adjacency))?;
 
         // operations
         let raw_operations = track_assert_some!(array[3].as_str(), Failed);
@@ -125,8 +126,8 @@ impl RawRecord {
             module_hash,
             epochs,
             spec: ModelSpec {
-                adjacency,
                 operations,
+                adjacency,
             },
             metrics,
         })
