@@ -10,9 +10,11 @@
 #[macro_use]
 extern crate trackable;
 
-pub mod api;
+pub use self::dataset::NasBench;
+
 pub mod model;
 
+mod dataset;
 mod protobuf;
 mod tfrecord;
 

@@ -2,8 +2,9 @@
 extern crate trackable;
 
 use nasbench::model::{AdjacencyMatrix, ModelSpec, Op};
+use nasbench::NasBench;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use structopt::StructOpt;
 use trackable::error::Failed;
@@ -43,9 +44,9 @@ fn main() -> MainResult {
             tfrecord_format_dataset,
             binary_format_dataset,
         } => {
-            let nasbench = track!(nasbench::api::NasBench::from_tfrecord_file(
-                tfrecord_format_dataset
-            ))?;
+            let file =
+                track_any_err!(File::open(&tfrecord_format_dataset); tfrecord_format_dataset)?;
+            let nasbench = track!(NasBench::from_tfrecord_reader(BufReader::new(file)))?;
 
             let file = track_any_err!(File::create(binary_format_dataset))?;
             track!(nasbench.to_writer(BufWriter::new(file)))?
@@ -58,7 +59,7 @@ fn main() -> MainResult {
             stop_halfway,
             sample_index,
         } => {
-            let nasbench = track!(nasbench::api::NasBench::new(dataset))?;
+            let nasbench = track!(NasBench::new(dataset))?;
             let model_spec = ModelSpec { ops, adjacency };
             let model_stats =
                 track_assert_some!(nasbench.models().get(&model_spec), Failed, "Unknown model");

@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 use trackable::error::{Failed, Failure};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EvalStats {
     pub training_time: f64,
     pub training_accuracy: f64,
@@ -46,7 +46,7 @@ impl From<EvaluationData> for EvalStats {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ModelStats {
     pub trainable_parameters: u32,
     pub epochs: BTreeMap<u8, Vec<DataPoint>>,
@@ -93,7 +93,7 @@ impl ModelStats {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DataPoint {
     pub halfway: EvalStats,
     pub complete: EvalStats,

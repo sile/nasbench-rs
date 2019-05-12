@@ -22,7 +22,6 @@ impl TfRecord {
         track_any_err!(reader.read_exact(&mut data))?;
         let data_crc = track_any_err!(reader.read_u32::<LittleEndian>())?;
         track!(check_crc(&data, data_crc))?;
-
         Ok(Self { len, data })
     }
 }
