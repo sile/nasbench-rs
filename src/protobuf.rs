@@ -1,10 +1,12 @@
-// https://github.com/google-research/nasbench/blob/master/nasbench/lib/model_metrics.proto
+//! See: [model_metrics.proto] file.
+//!
+//! [model_metrics.proto]: https://github.com/google-research/nasbench/blob/master/nasbench/lib/model_metrics.proto
 use protobuf_codec::field::num::{F1, F2, F3, F4, F5, F6};
 use protobuf_codec::field::{FieldDecoder, Fields, MaybeDefault, MessageFieldDecoder, Repeated};
 use protobuf_codec::message::MessageDecoder;
 use protobuf_codec::scalar::{DoubleDecoder, Int32Decoder, StringDecoder};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ModelMetrics {
     /// Metrics that are evaluated at each checkpoint.
     ///
@@ -22,7 +24,7 @@ pub struct ModelMetrics {
     pub total_time: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EvaluationData {
     /// Current epoch at the time of this evaluation.
     pub current_epoch: f64,
@@ -124,3 +126,53 @@ impl_message_decode!(EvaluationDataDecoder, EvaluationData, |t: (
         checkpoint_path: t.5
     }
 ));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64;
+    use bytecodec::DecodeExt;
+    use trackable::result::TestResult;
+
+    #[test]
+    fn decoder_works() -> TestResult {
+        let base64_bytes = "Ci0JAAAAAAAAAAARAAAAAAAAAAAZAAAAoKqquT8hAAAAYJAGuT8pAAAAAGmQuT8KLQkAAAAAAAAAQBEAAADAdJNGQBkAAABgkAa6PyEAAAAg3/K6PykAAACAy7e6PwotCQAAAAAAABBAEQAAACDbeVZAGQAAAEAaZNY/IQAAAGBVVdY/KQAAAODybdY/EIqYigQZAABAhznbeUA=";
+        let bytes = track_any_err!(base64::decode(&base64_bytes))?;
+
+        let metrics = track!(ModelMetricsDecoder::default().decode_from_bytes(&bytes))?;
+
+        let expected = ModelMetrics {
+            evaluation_data_list: vec![
+                EvaluationData {
+                    current_epoch: 0.0,
+                    training_time: 0.0,
+                    train_accuracy: 0.1002604141831398,
+                    validation_accuracy: 0.09775640815496445,
+                    test_accuracy: 0.09985977411270142,
+                    checkpoint_path: "".to_owned(),
+                },
+                EvaluationData {
+                    current_epoch: 2.0,
+                    training_time: 45.152000427246094,
+                    train_accuracy: 0.10166265815496445,
+                    validation_accuracy: 0.10526842623949051,
+                    test_accuracy: 0.10436698794364929,
+                    checkpoint_path: "".to_owned(),
+                },
+                EvaluationData {
+                    current_epoch: 4.0,
+                    training_time: 89.90399932861328,
+                    train_accuracy: 0.3498597741127014,
+                    validation_accuracy: 0.3489583432674408,
+                    test_accuracy: 0.3504607379436493,
+                    checkpoint_path: "".to_owned(),
+                },
+            ],
+            trainable_parameters: 8555530,
+            total_time: 413.7015450000763,
+        };
+        assert_eq!(metrics, expected);
+
+        Ok(())
+    }
+}

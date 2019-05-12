@@ -4,14 +4,14 @@ use crc;
 use std::io::Read;
 use trackable::error::Failed;
 
-/// https://www.tensorflow.org/tutorials/load_data/tf_records
+/// See: https://www.tensorflow.org/tutorials/load_data/tf_records.
 #[derive(Debug)]
 pub struct TfRecord {
     pub len: u64,
     pub data: Vec<u8>,
 }
 impl TfRecord {
-    pub fn read_from<R: Read>(mut reader: R) -> Result<Self> {
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
         let mut len_buf = [0; 8];
         track_any_err!(reader.read_exact(&mut len_buf))?;
         let len = LittleEndian::read_u64(&len_buf);
@@ -44,7 +44,7 @@ impl<R: Read> Iterator for TfRecordStream<R> {
         match track_any_err!(self.reader.read(&mut peek)) {
             Err(e) => Some(Err(e)),
             Ok(0) => None,
-            Ok(_) => match track!(TfRecord::read_from(peek.chain(&mut self.reader))) {
+            Ok(_) => match track!(TfRecord::from_reader(peek.chain(&mut self.reader))) {
                 Err(e) => Some(Err(e)),
                 Ok(r) => Some(Ok(r)),
             },

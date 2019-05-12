@@ -74,9 +74,6 @@ impl NasBench {
         }
         Ok(())
     }
-
-    // pub fn query(&self, model_spec: &ModelSpec, epochs: usize, stop_halfway:bool, TODO: sample_index) {}
-    //
 }
 
 #[derive(Debug)]
