@@ -1,25 +1,47 @@
-use crate::model::{DataPoint, EvalStats, ModelSpec, ModelStats, Op};
+use crate::model::{DataPoint, EvalStats, ModelSpec, ModelStats};
 use crate::protobuf::{ModelMetrics, ModelMetricsDecoder};
 use crate::tfrecord::TfRecordStream;
 use crate::Result;
 use base64;
 use bytecodec::DecodeExt;
 use serde_json::{self, Value as JsonValue};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::u128;
 use trackable::error::{ErrorKindExt, Failed};
 
 #[derive(Debug)]
 pub struct NasBench {
-    valid_epochs: HashSet<u8>,
     models: HashMap<ModelSpec, ModelStats>,
 }
 impl NasBench {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = track_any_err!(File::open(&path); path.as_ref())?;
+        let mut reader = BufReader::new(file);
+
+        let mut models = HashMap::new();
+        loop {
+            let mut peek = [0; 1];
+            if track_any_err!(reader.read(&mut peek))? == 0 {
+                break;
+            }
+
+            let mut reader = peek.chain(&mut reader);
+            let spec = track!(ModelSpec::from_reader(&mut reader))?;
+            let stats = track!(ModelStats::from_reader(&mut reader))?;
+            models.insert(spec, stats);
+        }
+
+        Ok(Self { models })
+    }
+
+    pub fn models(&self) -> &HashMap<ModelSpec, ModelStats> {
+        &self.models
+    }
+
     pub fn from_tfrecord_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let mut valid_epochs = HashSet::new();
         let mut models = HashMap::<_, ModelStats>::new();
 
         let file = track_any_err!(File::open(&path); path.as_ref())?;
@@ -27,8 +49,6 @@ impl NasBench {
             let record = track!(record)?;
             let json: Vec<JsonValue> = track_any_err!(serde_json::from_slice(&record.data))?;
             let record = track!(RawRecord::from_json(json))?;
-
-            valid_epochs.insert(record.epochs);
 
             let mut model = models.entry(record.spec.clone()).or_default();
             model.trainable_parameters = record.metrics.trainable_parameters as u32;
@@ -44,10 +64,7 @@ impl NasBench {
                 .push(data_point);
         }
 
-        Ok(Self {
-            valid_epochs,
-            models,
-        })
+        Ok(Self { models })
     }
 
     pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
@@ -58,7 +75,6 @@ impl NasBench {
         Ok(())
     }
 
-    // pub fn is_valid(&self, model_spec:&ModelSpec);
     // pub fn query(&self, model_spec: &ModelSpec, epochs: usize, stop_halfway:bool, TODO: sample_index) {}
     //
 }
@@ -96,15 +112,7 @@ impl RawRecord {
         let raw_operations = track_assert_some!(array[3].as_str(), Failed);
         let mut operations = Vec::new();
         for op in raw_operations.split(',') {
-            let op = match op {
-                "input" => Op::Input,
-                "conv1x1-bn-relu" => Op::Conv1x1,
-                "conv3x3-bn-relu" => Op::Conv3x3,
-                "maxpool3x3" => Op::MaxPool3x3,
-                "output" => Op::Output,
-                _ => track_panic!(Failed, "Unknown operation: {:?}", op),
-            };
-            operations.push(op);
+            operations.push(track!(op.parse())?);
         }
 
         // metrics
