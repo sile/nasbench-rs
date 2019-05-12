@@ -164,11 +164,28 @@ impl AdjacencyMatrix {
         Ok(())
     }
 }
+impl FromStr for AdjacencyMatrix {
+    type Err = Failure;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let dim = (s.len() as f64).sqrt() as usize;
+        track_assert_eq!(dim * dim, s.len(), Failed, "Not a matrix: {:?}", s);
+
+        let mut matrix = vec![vec![false; dim]; dim];
+        for i in 0..dim {
+            for j in 0..dim {
+                matrix[i][j] = s.as_bytes()[i * dim + j] == '1' as u8;
+            }
+        }
+
+        track!(Self::new(matrix), "Not an upper triangular matrix; {:?}", s)
+    }
+}
 
 // a.k.a. module
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModelSpec {
-    pub operations: Vec<Op>,
+    pub ops: Vec<Op>,
     pub adjacency: AdjacencyMatrix,
 }
 impl ModelSpec {
@@ -176,7 +193,7 @@ impl ModelSpec {
         let adjacency = track!(AdjacencyMatrix::from_reader(&mut reader))?;
 
         let len = track_any_err!(reader.read_u8())? as usize;
-        let mut operations = Vec::with_capacity(len);
+        let mut ops = Vec::with_capacity(len);
         for _ in 0..len {
             let op = match track_any_err!(reader.read_u8())? {
                 0 => Op::Input,
@@ -186,20 +203,17 @@ impl ModelSpec {
                 4 => Op::Output,
                 n => track_panic!(Failed, "Unknown operation number: {}", n),
             };
-            operations.push(op);
+            ops.push(op);
         }
 
-        Ok(Self {
-            adjacency,
-            operations,
-        })
+        Ok(Self { adjacency, ops })
     }
 
     pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
         track!(self.adjacency.to_writer(&mut writer))?;
 
-        track_any_err!(writer.write_u8(self.operations.len() as u8))?;
-        for op in &self.operations {
+        track_any_err!(writer.write_u8(self.ops.len() as u8))?;
+        for op in &self.ops {
             track_any_err!(writer.write_u8(*op as u8))?;
         }
 
