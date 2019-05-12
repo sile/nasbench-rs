@@ -3,8 +3,8 @@ nasbench
 
 [![nasbench](https://img.shields.io/crates/v/nasbench.svg)](https://crates.io/crates/nasbench)
 [![Documentation](https://docs.rs/nasbench/badge.svg)](https://docs.rs/nasbench)
-[![Build Status](https://travis-ci.org/sile/nasbench.svg?branch=master)](https://travis-ci.org/sile/nasbench)
-[![Code Coverage](https://codecov.io/gh/sile/nasbench/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/nasbench/branch/master)
+[![Build Status](https://travis-ci.org/sile/nasbench-rs.svg?branch=master)](https://travis-ci.org/sile/nasbench-rs)
+[![Code Coverage](https://codecov.io/gh/sile/nasbench-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/nasbench/branch-rs/master)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Rust port of [google-research/nasbench][NASBench].

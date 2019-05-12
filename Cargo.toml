@@ -11,8 +11,8 @@ keywords = ["nas", "benchmark-datasets"]
 license = "MIT"
 
 [badges]
-travis-ci = {repository = "sile/nasbench"}
-codecov = {repository = "sile/nasbench"}
+travis-ci = {repository = "sile/nasbench-rs"}
+codecov = {repository = "sile/nasbench-rs"}
 
 [dependencies]
 base64 = "0.10"
