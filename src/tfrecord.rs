@@ -54,7 +54,7 @@ impl<R: Read> Iterator for TfRecordStream<R> {
 fn check_crc(bytes: &[u8], actual_crc: u32) -> Result<()> {
     let expected_crc = crc::crc32::checksum_castagnoli(&bytes);
     let expected_crc = (expected_crc.overflowing_shr(15).0 | expected_crc.overflowing_shl(17).0)
-        .overflowing_add(0xa282ead8)
+        .overflowing_add(0xa282_ead8)
         .0;
     track_assert_eq!(actual_crc, expected_crc, Failed);
     Ok(())
