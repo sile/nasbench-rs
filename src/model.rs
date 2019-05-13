@@ -1,6 +1,7 @@
 use crate::protobuf::EvaluationData;
 use crate::Result;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
+use md5;
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::str::FromStr;
@@ -16,6 +17,51 @@ pub struct ModelSpec {
     pub adjacency: AdjacencyMatrix,
 }
 impl ModelSpec {
+    pub(crate) fn module_hash(&self) -> u128 {
+        let dim = self.ops.len();
+
+        let mut hashes = Vec::with_capacity(dim);
+        for (row, op) in self.ops.iter().enumerate() {
+            let in_edges = self.adjacency.in_edges(row);
+            let out_edges = self.adjacency.out_edges(row);
+            let s = format!("({}, {}, {})", out_edges, in_edges, op.as_index());
+            hashes.push(format!("{:032x}", md5::compute(s.as_bytes())));
+        }
+
+        for _ in 0..dim {
+            let mut new_hashes = Vec::with_capacity(dim);
+            for v in 0..dim {
+                let mut in_neighbors = (0..dim)
+                    .filter(|&w| self.adjacency.is_adjacent(w, v))
+                    .map(|w| hashes[w].as_str())
+                    .collect::<Vec<_>>();
+                let mut out_neighbors = (0..dim)
+                    .filter(|&w| self.adjacency.is_adjacent(v, w))
+                    .map(|w| hashes[w].as_str())
+                    .collect::<Vec<_>>();
+                in_neighbors.sort();
+                out_neighbors.sort();
+
+                let s = format!(
+                    "{}|{}|{}",
+                    in_neighbors.join(""),
+                    out_neighbors.join(""),
+                    hashes[v]
+                );
+                new_hashes.push(format!("{:032x}", md5::compute(s.as_bytes())));
+            }
+            hashes = new_hashes;
+        }
+
+        hashes.sort();
+        let temp = hashes
+            .iter()
+            .map(|h| format!("'{}'", h))
+            .collect::<Vec<_>>();
+        let fingerprint = format!("[{}]", temp.join(", "));
+        BigEndian::read_u128(&md5::compute(fingerprint.as_bytes()).0)
+    }
+
     pub(crate) fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
         let adjacency = track!(AdjacencyMatrix::from_reader(&mut reader))?;
 
@@ -78,6 +124,17 @@ pub enum Op {
     /// Output tensor.
     Output,
 }
+impl Op {
+    fn as_index(&self) -> isize {
+        match self {
+            Op::Input => -1,
+            Op::Conv3x3 => 0,
+            Op::Conv1x1 => 1,
+            Op::MaxPool3x3 => 2,
+            Op::Output => -2,
+        }
+    }
+}
 impl FromStr for Op {
     type Err = Failure;
 
@@ -123,6 +180,48 @@ pub struct AdjacencyMatrix {
     triangular_matrix: Vec<bool>,
 }
 impl AdjacencyMatrix {
+    // TODO: has_edge
+    fn is_adjacent(&self, row: usize, column: usize) -> bool {
+        if column <= row {
+            return false;
+        }
+
+        let dim = self.dimension();
+
+        let mut width = dim - 1;
+        let mut offset = 0;
+        for _ in 0..row {
+            offset += width;
+            width -= 1;
+        }
+
+        self.triangular_matrix[offset..][..width]
+            .into_iter()
+            .nth(column - row - 1)
+            .cloned()
+            .unwrap_or_else(|| unreachable!())
+    }
+
+    fn in_edges(&self, row: usize) -> usize {
+        let dim = self.dimension();
+        (0..dim) // TODO: (0..row)
+            .filter(|&column| self.is_adjacent(column, row))
+            .count()
+    }
+
+    fn out_edges(&self, row: usize) -> usize {
+        let mut size = self.dimension() - 1;
+        let mut offset = 0;
+        for _ in 0..row {
+            offset += size;
+            size -= 1;
+        }
+        self.triangular_matrix[offset..][..size]
+            .iter()
+            .filter(|b| **b)
+            .count()
+    }
+
     /// Makes a new `AdjacencyMatrix` instance.
     pub fn new(matrix: Vec<Vec<bool>>) -> Result<Self> {
         track_assert!(!matrix.is_empty(), Failed);

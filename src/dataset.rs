@@ -91,7 +91,7 @@ impl NasBench {
 
 #[derive(Debug)]
 struct NasBenchRecord {
-    module_hash: u128,
+    module_hash: u128, // TODO: remove
     epochs: u8,
     spec: ModelSpec,
     metrics: ModelMetrics,
@@ -125,10 +125,12 @@ impl NasBenchRecord {
         let metrics = track!(ModelMetricsDecoder::default().decode_from_bytes(&raw_metrics_bytes))
             .map_err(|e| Failed.takes_over(e))?;
 
+        let spec = ModelSpec { ops, adjacency };
+        assert_eq!(module_hash, spec.module_hash());
         Ok(Self {
             module_hash,
             epochs,
-            spec: ModelSpec { ops, adjacency },
+            spec,
             metrics,
         })
     }
