@@ -73,15 +73,16 @@ impl NasBench {
     /// See [Download the dataset] for available dataset.
     ///
     /// [Download the dataset]: https://github.com/google-research/nasbench#download-the-dataset
-    pub fn from_tfrecord_reader<R: Read>(reader: R) -> Result<Self> {
-        // TODO: validate_module_hash option
-        // TODO: show progress
+    pub fn from_tfrecord_reader<R: Read>(reader: R, validate_module_hash: bool) -> Result<Self> {
         let mut models = HashMap::<_, ModelStats>::new();
 
         for record in TfRecordStream::new(reader) {
             let record = track!(record)?;
             let json: Vec<JsonValue> = track_any_err!(serde_json::from_slice(&record.data))?;
             let record = track!(NasBenchRecord::from_json(json))?;
+            if validate_module_hash {
+                track!(record.spec.validate_module_hash(); record)?;
+            }
 
             let mut model = models.entry(record.spec.clone()).or_default();
             model.trainable_parameters = record.metrics.trainable_parameters as u32;
@@ -175,7 +176,7 @@ mod tests {
             47, 69, 73, 113, 89, 105, 103, 81, 90, 65, 65, 66, 65, 104, 122, 110, 98, 101, 85, 65,
             61, 92, 110, 34, 93, 0x68, 0x16, 0x69, 0x03,
         ];
-        let nasbench0 = track!(NasBench::from_tfrecord_reader(&tfrecord_bytes[..]))?;
+        let nasbench0 = track!(NasBench::from_tfrecord_reader(&tfrecord_bytes[..], true))?;
 
         let mut bytes = Vec::new();
         track!(nasbench0.to_writer(&mut bytes))?;

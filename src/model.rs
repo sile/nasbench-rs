@@ -63,6 +63,12 @@ impl ModelSpec {
         }
     }
 
+    pub(crate) fn validate_module_hash(&self) -> Result<()> {
+        let expected_module_hash = Self::module_hash(&self.ops, &self.adjacency);
+        track_assert_eq!(self.module_hash, expected_module_hash, Failed);
+        Ok(())
+    }
+
     /// Returns a reference to the operations of this model.
     pub fn ops(&self) -> &[Op] {
         &self.ops
@@ -111,7 +117,7 @@ impl ModelSpec {
 
         for _ in 0..dim {
             let mut new_hashes = Vec::with_capacity(dim);
-            for v in 0..dim {
+            for (v, h) in hashes.iter().enumerate() {
                 let mut in_neighbors = (0..dim)
                     .filter(|&w| adjacency.has_edge(w, v))
                     .map(|w| hashes[w].as_str())
@@ -123,12 +129,7 @@ impl ModelSpec {
                 in_neighbors.sort();
                 out_neighbors.sort();
 
-                let s = format!(
-                    "{}|{}|{}",
-                    in_neighbors.join(""),
-                    out_neighbors.join(""),
-                    hashes[v]
-                );
+                let s = format!("{}|{}|{}", in_neighbors.join(""), out_neighbors.join(""), h);
                 new_hashes.push(format!("{:032x}", md5::compute(s.as_bytes())));
             }
             hashes = new_hashes;
@@ -223,7 +224,7 @@ pub enum Op {
     Output,
 }
 impl Op {
-    fn to_hash_index(&self) -> isize {
+    fn to_hash_index(self) -> isize {
         match self {
             Op::Input => -1,
             Op::Conv3x3 => 0,
@@ -583,6 +584,33 @@ mod tests {
             "0111000000000000".parse()?,
         )?;
         assert_eq!(model6, model7);
+
+        Ok(())
+    }
+
+    #[test]
+    fn module_hash_works() -> TopLevelResult {
+        let matrix = track!(AdjacencyMatrix::new(vec![
+            vec![false, true, true, true, false, true, false],
+            vec![false, false, false, false, false, false, true],
+            vec![false, false, false, false, false, false, true],
+            vec![false, false, false, false, true, false, false],
+            vec![false, false, false, false, false, false, true],
+            vec![false, false, false, false, false, false, true],
+            vec![false, false, false, false, false, false, false],
+        ]))?;
+        let ops = vec![
+            Op::Input,
+            Op::Conv1x1,
+            Op::Conv3x3,
+            Op::Conv3x3,
+            Op::Conv3x3,
+            Op::MaxPool3x3,
+            Op::Output,
+        ];
+
+        let spec = track!(ModelSpec::new(ops, matrix))?;
+        assert_eq!(spec.module_hash, 0x28cfc7874f6d200472e1a9dcd8650aa0);
 
         Ok(())
     }

@@ -16,6 +16,9 @@ enum Opt {
     Convert {
         tfrecord_format_dataset_path: PathBuf,
         binary_format_dataset_path: PathBuf,
+
+        #[structopt(long)]
+        validate_module_hash: bool,
     },
 
     #[structopt(about = "Queris evaluation metrics of a model")]
@@ -45,9 +48,13 @@ fn main() -> MainResult {
         Opt::Convert {
             tfrecord_format_dataset_path,
             binary_format_dataset_path,
+            validate_module_hash,
         } => {
             let file = track_any_err!(File::open(&tfrecord_format_dataset_path); tfrecord_format_dataset_path)?;
-            let nasbench = track!(NasBench::from_tfrecord_reader(BufReader::new(file)))?;
+            let nasbench = track!(NasBench::from_tfrecord_reader(
+                BufReader::new(file),
+                validate_module_hash
+            ))?;
 
             let file = track_any_err!(File::create(binary_format_dataset_path))?;
             track!(nasbench.to_writer(BufWriter::new(file)))?
