@@ -57,7 +57,7 @@ let nasbench = NasBench::new("nasbench_full.bin")?;
 let ops = vec![Op::Input, Op::Conv3x3, Op::MaxPool3x3, Op::Conv3x3,
                Op::Conv3x3, Op::Conv1x1, Op::Output];
 let adjacency = "0100110001000000010010000010000001000000010000000".parse()?;
-let model_spec = ModelSpec{ops, adjacency};
+let model_spec = ModelSpec::new(ops, adjacency)?;
 println!("{:?}", nasbench.models().get(&model_spec));
 ```
 
