@@ -29,7 +29,7 @@ use trackable::error::{Failed, Failure};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ModelSpec {
     ops: Vec<Op>,
     adjacency: AdjacencyMatrix,
@@ -179,6 +179,15 @@ impl ModelSpec {
         track_any_err!(writer.write_u128::<BigEndian>(self.module_hash))?;
 
         Ok(())
+    }
+}
+impl fmt::Debug for ModelSpec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ModelSpec {{ ops: {:?}, adjacency: {:?}, .. }}",
+            self.ops, self.adjacency
+        )
     }
 }
 impl PartialEq for ModelSpec {
