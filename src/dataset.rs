@@ -65,6 +65,10 @@ impl NasBench {
             models.insert(spec, stats);
         }
 
+        let mut buf = [0; 1];
+        let eos = track_any_err!(reader.read(&mut buf))? == 0;
+        track_assert!(eos, Failed);
+
         Ok(Self { models })
     }
 
