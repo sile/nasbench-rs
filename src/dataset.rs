@@ -33,6 +33,7 @@ impl NasBench {
 
     /// Serializes the state of this dataset to the given writer.
     pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+        // TODO: magic code, length
         for (spec, stats) in &self.models {
             track!(spec.to_writer(&mut writer))?;
             track!(stats.to_writer(&mut writer))?;
@@ -64,6 +65,8 @@ impl NasBench {
     ///
     /// [Download the dataset]: https://github.com/google-research/nasbench#download-the-dataset
     pub fn from_tfrecord_reader<R: Read>(reader: R) -> Result<Self> {
+        // TODO: validate_module_hash option
+        // TODO: show progress
         let mut models = HashMap::<_, ModelStats>::new();
 
         for record in TfRecordStream::new(reader) {
@@ -91,7 +94,6 @@ impl NasBench {
 
 #[derive(Debug)]
 struct NasBenchRecord {
-    module_hash: u128, // TODO: remove
     epochs: u8,
     spec: ModelSpec,
     metrics: ModelMetrics,
@@ -125,10 +127,8 @@ impl NasBenchRecord {
         let metrics = track!(ModelMetricsDecoder::default().decode_from_bytes(&raw_metrics_bytes))
             .map_err(|e| Failed.takes_over(e))?;
 
-        let spec = ModelSpec { ops, adjacency };
-        assert_eq!(module_hash, spec.module_hash());
+        let spec = ModelSpec::with_module_hash(ops, adjacency, module_hash);
         Ok(Self {
-            module_hash,
             epochs,
             spec,
             metrics,

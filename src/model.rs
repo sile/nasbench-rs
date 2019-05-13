@@ -3,28 +3,109 @@ use crate::Result;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use md5;
 use std::collections::BTreeMap;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::str::FromStr;
 use trackable::error::{Failed, Failure};
 
 /// Model specification given adjacency matrix and operations (a.k.a. "module").
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// Note that two instances of `ModuleSpec` are regarded as the same
+/// if their structures are semantically equivalent (see below).
+///
+/// ```rust
+/// use nasbench::{ModelSpec, Op};
+/// # use trackable::result::TopLevelResult;
+///
+/// # fn main() -> TopLevelResult {
+/// let model0 = ModelSpec::new(vec![Op::Input, Op::Output], "0100".parse()?)?;
+/// let model1 = ModelSpec::new(
+///     vec![Op::Input, Op::Conv1x1, Op::Output],
+///     "001000000".parse()?,
+/// )?;
+///
+/// assert_eq!(model0, model1);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone)]
 pub struct ModelSpec {
-    /// Operations.
-    pub ops: Vec<Op>,
-
-    /// Adjacency matrix.
-    pub adjacency: AdjacencyMatrix,
+    ops: Vec<Op>,
+    adjacency: AdjacencyMatrix,
+    module_hash: u128,
 }
 impl ModelSpec {
-    pub(crate) fn module_hash(&self) -> u128 {
-        let dim = self.ops.len();
+    /// Makes a new `ModelSpec` instance.
+    pub fn new(mut ops: Vec<Op>, mut adjacency: AdjacencyMatrix) -> Result<Self> {
+        track_assert_eq!(ops.len(), adjacency.dimension(), Failed);
+        track_assert!(adjacency.dimension() >= 2, Failed);
+
+        Self::prune(&mut ops, &mut adjacency);
+        let module_hash = Self::module_hash(&ops, &adjacency);
+        Ok(Self {
+            ops,
+            adjacency,
+            module_hash,
+        })
+    }
+
+    pub(crate) fn with_module_hash(
+        mut ops: Vec<Op>,
+        mut adjacency: AdjacencyMatrix,
+        module_hash: u128,
+    ) -> Self {
+        Self::prune(&mut ops, &mut adjacency);
+        Self {
+            ops,
+            adjacency,
+            module_hash,
+        }
+    }
+
+    /// Returns a reference to the operations of this model.
+    pub fn ops(&self) -> &[Op] {
+        &self.ops
+    }
+
+    /// Returns a reference to the adjacency matrix of this model.
+    pub fn adjacency(&self) -> &AdjacencyMatrix {
+        &self.adjacency
+    }
+
+    fn prune(ops: &mut Vec<Op>, adjacency: &mut AdjacencyMatrix) {
+        let mut deleted = true;
+        while deleted {
+            deleted = false;
+
+            for row in 1..adjacency.dimension() - 1 {
+                let in_edges = adjacency.in_edges(row);
+                if in_edges == 0 {
+                    deleted = true;
+                    ops.remove(row);
+                    adjacency.remove(row);
+                    break;
+                }
+
+                let out_edges = adjacency.out_edges(row);
+                if out_edges == 0 {
+                    deleted = true;
+                    ops.remove(row);
+                    adjacency.remove(row);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn module_hash(ops: &[Op], adjacency: &AdjacencyMatrix) -> u128 {
+        let dim = ops.len();
 
         let mut hashes = Vec::with_capacity(dim);
-        for (row, op) in self.ops.iter().enumerate() {
-            let in_edges = self.adjacency.in_edges(row);
-            let out_edges = self.adjacency.out_edges(row);
-            let s = format!("({}, {}, {})", out_edges, in_edges, op.as_index());
+        for (row, op) in ops.iter().enumerate() {
+            let in_edges = adjacency.in_edges(row);
+            let out_edges = adjacency.out_edges(row);
+            let s = format!("({}, {}, {})", out_edges, in_edges, op.to_hash_index());
             hashes.push(format!("{:032x}", md5::compute(s.as_bytes())));
         }
 
@@ -32,11 +113,11 @@ impl ModelSpec {
             let mut new_hashes = Vec::with_capacity(dim);
             for v in 0..dim {
                 let mut in_neighbors = (0..dim)
-                    .filter(|&w| self.adjacency.is_adjacent(w, v))
+                    .filter(|&w| adjacency.has_edge(w, v))
                     .map(|w| hashes[w].as_str())
                     .collect::<Vec<_>>();
                 let mut out_neighbors = (0..dim)
-                    .filter(|&w| self.adjacency.is_adjacent(v, w))
+                    .filter(|&w| adjacency.has_edge(v, w))
                     .map(|w| hashes[w].as_str())
                     .collect::<Vec<_>>();
                 in_neighbors.sort();
@@ -54,17 +135,15 @@ impl ModelSpec {
         }
 
         hashes.sort();
-        let temp = hashes
+        let hashes = hashes
             .iter()
             .map(|h| format!("'{}'", h))
             .collect::<Vec<_>>();
-        let fingerprint = format!("[{}]", temp.join(", "));
+        let fingerprint = format!("[{}]", hashes.join(", "));
         BigEndian::read_u128(&md5::compute(fingerprint.as_bytes()).0)
     }
 
     pub(crate) fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
-        let adjacency = track!(AdjacencyMatrix::from_reader(&mut reader))?;
-
         let len = track_any_err!(reader.read_u8())? as usize;
         let mut ops = Vec::with_capacity(len);
         for _ in 0..len {
@@ -79,18 +158,37 @@ impl ModelSpec {
             ops.push(op);
         }
 
-        Ok(Self { adjacency, ops })
+        let adjacency = track!(AdjacencyMatrix::from_reader(&mut reader))?;
+        let module_hash = track_any_err!(reader.read_u128::<BigEndian>())?;
+
+        Ok(Self {
+            ops,
+            adjacency,
+            module_hash,
+        })
     }
 
     pub(crate) fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
-        track!(self.adjacency.to_writer(&mut writer))?;
-
         track_any_err!(writer.write_u8(self.ops.len() as u8))?;
         for op in &self.ops {
             track_any_err!(writer.write_u8(*op as u8))?;
         }
 
+        track!(self.adjacency.to_writer(&mut writer))?;
+        track_any_err!(writer.write_u128::<BigEndian>(self.module_hash))?;
+
         Ok(())
+    }
+}
+impl PartialEq for ModelSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.module_hash == other.module_hash
+    }
+}
+impl Eq for ModelSpec {}
+impl Hash for ModelSpec {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.module_hash.hash(h);
     }
 }
 
@@ -125,7 +223,7 @@ pub enum Op {
     Output,
 }
 impl Op {
-    fn as_index(&self) -> isize {
+    fn to_hash_index(&self) -> isize {
         match self {
             Op::Input => -1,
             Op::Conv3x3 => 0,
@@ -175,58 +273,20 @@ impl FromStr for Op {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AdjacencyMatrix {
-    triangular_matrix: Vec<bool>,
+    dim: u8,
+    triangle: u32,
 }
 impl AdjacencyMatrix {
-    // TODO: has_edge
-    fn is_adjacent(&self, row: usize, column: usize) -> bool {
-        if column <= row {
-            return false;
-        }
-
-        let dim = self.dimension();
-
-        let mut width = dim - 1;
-        let mut offset = 0;
-        for _ in 0..row {
-            offset += width;
-            width -= 1;
-        }
-
-        self.triangular_matrix[offset..][..width]
-            .into_iter()
-            .nth(column - row - 1)
-            .cloned()
-            .unwrap_or_else(|| unreachable!())
-    }
-
-    fn in_edges(&self, row: usize) -> usize {
-        let dim = self.dimension();
-        (0..dim) // TODO: (0..row)
-            .filter(|&column| self.is_adjacent(column, row))
-            .count()
-    }
-
-    fn out_edges(&self, row: usize) -> usize {
-        let mut size = self.dimension() - 1;
-        let mut offset = 0;
-        for _ in 0..row {
-            offset += size;
-            size -= 1;
-        }
-        self.triangular_matrix[offset..][..size]
-            .iter()
-            .filter(|b| **b)
-            .count()
-    }
-
     /// Makes a new `AdjacencyMatrix` instance.
     pub fn new(matrix: Vec<Vec<bool>>) -> Result<Self> {
-        track_assert!(!matrix.is_empty(), Failed);
         let dim = matrix.len();
-        let mut triangular_matrix = Vec::with_capacity((1..dim).sum());
+        track_assert_ne!(dim, 0, Failed);
+        track_assert!(dim <= 7, Failed; dim);
+
+        let mut triangle = 0;
+        let mut offset = 0;
         for (i, row) in matrix.into_iter().enumerate() {
             track_assert_eq!(row.len(), dim, Failed);
 
@@ -235,40 +295,86 @@ impl AdjacencyMatrix {
                     track_assert!(!adjacent, Failed; i, j);
                     continue;
                 }
-                triangular_matrix.push(adjacent);
+
+                offset += 1;
+                if !adjacent {
+                    continue;
+                }
+
+                triangle |= 1 << (offset - 1);
             }
         }
-        Ok(Self { triangular_matrix })
+
+        let dim = dim as u8;
+        Ok(Self { dim, triangle })
     }
 
     /// Returns the dimension of this matrix.
     pub fn dimension(&self) -> usize {
-        let mut n = 0;
-        for dim in 1.. {
-            if n >= self.triangular_matrix.len() {
-                return dim;
-            }
-            n += dim;
-        }
-        unreachable!();
+        usize::from(self.dim)
     }
 
-    pub(crate) fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
-        let len = track_any_err!(reader.read_u8())? as usize;
-        let mut triangular_matrix = Vec::with_capacity(len);
-        for _ in 0..len {
-            triangular_matrix.push(track_any_err!(reader.read_u8())? == 1);
-        }
-        Ok(Self { triangular_matrix })
+    fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
+        let dim = track_any_err!(reader.read_u8())?;
+        let triangle = track_any_err!(reader.read_u32::<BigEndian>())?;
+        Ok(Self { dim, triangle })
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
-        let len = self.triangular_matrix.len();
-        track_any_err!(writer.write_u8(len as u8))?;
-        for &b in &self.triangular_matrix {
-            track_any_err!(writer.write_u8(b as u8))?;
-        }
+    fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+        track_any_err!(writer.write_u8(self.dim))?;
+        track_any_err!(writer.write_u32::<BigEndian>(self.triangle))?;
         Ok(())
+    }
+
+    fn remove(&mut self, row: usize) {
+        let mut triangle = 0;
+        let mut offset = 0;
+        for i in (0..self.dimension()).filter(|&i| i != row) {
+            for j in (i + 1..self.dimension()).filter(|&j| j != row) {
+                offset += 1;
+                if !self.has_edge(i, j) {
+                    continue;
+                }
+
+                triangle |= 1 << (offset - 1);
+            }
+        }
+
+        self.dim -= 1;
+        self.triangle = triangle;
+    }
+
+    fn has_edge(&self, row: usize, column: usize) -> bool {
+        if column <= row {
+            return false;
+        }
+
+        let offset = match self.dim {
+            7 => &[0, 6, 11, 15, 18, 20, 21][..],
+            6 => &[0, 5, 9, 12, 14, 15][..],
+            5 => &[0, 4, 7, 9, 10][..],
+            4 => &[0, 3, 5, 6][..],
+            3 => &[0, 2, 1][..],
+            2 => &[0, 1][..],
+            1 => &[0][..],
+            _ => {
+                unreachable!("dim={}", self.dim);
+            }
+        };
+        let i = offset[row] + column - row - 1;
+        (self.triangle & (1 << i)) != 0
+    }
+
+    fn in_edges(&self, row: usize) -> usize {
+        (0..row)
+            .filter(|&column| self.has_edge(column, row))
+            .count()
+    }
+
+    fn out_edges(&self, row: usize) -> usize {
+        (row + 1..self.dimension())
+            .filter(|&column| self.has_edge(row, column))
+            .count()
     }
 }
 impl FromStr for AdjacencyMatrix {
@@ -286,6 +392,21 @@ impl FromStr for AdjacencyMatrix {
         }
 
         track!(Self::new(matrix), "Not an upper triangular matrix; {:?}", s)
+    }
+}
+impl fmt::Debug for AdjacencyMatrix {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "AdjacencyMatrix(0b")?;
+        for row in 0..self.dimension() {
+            for column in 0..self.dimension() {
+                write!(f, "{}", self.has_edge(row, column) as u8)?;
+            }
+            if row != self.dimension() - 1 {
+                write!(f, "_")?;
+            }
+        }
+        write!(f, ")")?;
+        Ok(())
     }
 }
 
@@ -351,13 +472,13 @@ pub struct EpochStats {
     pub complete: EvaluationMetrics,
 }
 impl EpochStats {
-    pub(crate) fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
+    fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
         let halfway = track!(EvaluationMetrics::from_reader(&mut reader))?;
         let complete = track!(EvaluationMetrics::from_reader(&mut reader))?;
         Ok(Self { halfway, complete })
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+    fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
         track!(self.halfway.to_writer(&mut writer))?;
         track!(self.complete.to_writer(&mut writer))?;
         Ok(())
@@ -380,7 +501,7 @@ pub struct EvaluationMetrics {
     pub test_accuracy: f64,
 }
 impl EvaluationMetrics {
-    pub(crate) fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
+    fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
         let training_time = track_any_err!(reader.read_f64::<BigEndian>())?;
         let training_accuracy = track_any_err!(reader.read_f64::<BigEndian>())?;
         let validation_accuracy = track_any_err!(reader.read_f64::<BigEndian>())?;
@@ -393,7 +514,7 @@ impl EvaluationMetrics {
         })
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
+    fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
         track_any_err!(writer.write_f64::<BigEndian>(self.training_time))?;
         track_any_err!(writer.write_f64::<BigEndian>(self.training_accuracy))?;
         track_any_err!(writer.write_f64::<BigEndian>(self.validation_accuracy))?;
@@ -418,6 +539,55 @@ mod tests {
     use trackable::result::TopLevelResult;
 
     #[test]
+    fn model_spec_works() -> TopLevelResult {
+        let model0 = ModelSpec::new(vec![Op::Input, Op::Output], "0100".parse()?)?;
+        let model1 = ModelSpec::new(
+            vec![Op::Input, Op::Conv1x1, Op::Output],
+            "001000000".parse()?,
+        )?;
+        assert_eq!(model0, model1);
+
+        let model2 = ModelSpec::new(
+            vec![Op::Input, Op::Conv3x3, Op::MaxPool3x3, Op::Output],
+            "0101001000010000".parse()?,
+        )?;
+        let model3 = ModelSpec::new(
+            vec![
+                Op::Input,
+                Op::Conv1x1,
+                Op::Conv3x3,
+                Op::MaxPool3x3,
+                Op::Conv3x3,
+                Op::Output,
+            ],
+            "001001000000000100000001000000000000".parse()?,
+        )?;
+        assert_eq!(model2, model3);
+
+        let model4 = ModelSpec::new(vec![Op::Input, Op::Output], "0000".parse()?)?;
+        let model5 = ModelSpec::new(
+            vec![
+                Op::Input,
+                Op::Conv1x1,
+                Op::MaxPool3x3,
+                Op::Conv3x3,
+                Op::Output,
+            ],
+            "0000000000000000000000000".parse()?,
+        )?;
+        assert_eq!(model4, model5);
+
+        let model6 = ModelSpec::new(vec![Op::Input, Op::Output], "0100".parse()?)?;
+        let model7 = ModelSpec::new(
+            vec![Op::Input, Op::Conv3x3, Op::Conv1x1, Op::Output],
+            "0111000000000000".parse()?,
+        )?;
+        assert_eq!(model6, model7);
+
+        Ok(())
+    }
+
+    #[test]
     fn op_works() {
         assert_eq!("input".parse().ok(), Some(Op::Input));
         assert_eq!("conv1x1-bn-relu".parse().ok(), Some(Op::Conv1x1));
@@ -428,20 +598,33 @@ mod tests {
 
     #[test]
     fn adjacency_matrix_works() -> TopLevelResult {
-        let matrix0 = track!(AdjacencyMatrix::new(vec![
+        let original_matrix = vec![
             vec![false, true, false, false, true, true, false],
             vec![false, false, true, false, false, false, false],
             vec![false, false, false, true, false, false, true],
             vec![false, false, false, false, false, true, false],
             vec![false, false, false, false, false, true, false],
             vec![false, false, false, false, false, false, true],
-            vec![false, false, false, false, false, false, false]
-        ]))?;
+            vec![false, false, false, false, false, false, false],
+        ];
+
+        let matrix0 = track!(AdjacencyMatrix::new(original_matrix.clone()))?;
         assert_eq!(matrix0.dimension(), 7);
 
         let matrix1 = track!("0100110001000000010010000010000001000000010000000".parse())?;
         assert_eq!(matrix0, matrix1);
 
+        for row in 0..original_matrix.len() {
+            for column in 0..original_matrix.len() {
+                assert_eq!(
+                    matrix0.has_edge(row, column),
+                    original_matrix[row][column],
+                    "row={}, column={}",
+                    row,
+                    column
+                );
+            }
+        }
         Ok(())
     }
 }

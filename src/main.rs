@@ -61,7 +61,7 @@ fn main() -> MainResult {
             sample_index,
         } => {
             let nasbench = track!(NasBench::new(dataset_path))?;
-            let model_spec = ModelSpec { ops, adjacency };
+            let model_spec = track!(ModelSpec::new(ops, adjacency))?;
             let model_stats =
                 track_assert_some!(nasbench.models().get(&model_spec), Failed, "Unknown model");
             let epoch_stats_list =
