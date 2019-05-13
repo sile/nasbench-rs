@@ -4,13 +4,17 @@ use crate::tfrecord::TfRecordStream;
 use crate::Result;
 use base64;
 use bytecodec::DecodeExt;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use serde_json::{self, Value as JsonValue};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
+use std::str;
 use std::u128;
 use trackable::error::{ErrorKindExt, Failed};
+
+const MAGIC_COOKIE: &str = "nasbench-rs";
 
 /// NAS benchmark dataset.
 #[derive(Debug)]
@@ -33,7 +37,9 @@ impl NasBench {
 
     /// Serializes the state of this dataset to the given writer.
     pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<()> {
-        // TODO: magic code, length
+        track_any_err!(writer.write_all(MAGIC_COOKIE.as_bytes()))?;
+        track_any_err!(writer.write_u32::<BigEndian>(self.models.len() as u32))?;
+
         for (spec, stats) in &self.models {
             track!(spec.to_writer(&mut writer))?;
             track!(stats.to_writer(&mut writer))?;
@@ -43,14 +49,17 @@ impl NasBench {
 
     /// Deserializes a `NasBench` instance from the given reader.
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
-        let mut models = HashMap::new();
-        loop {
-            let mut peek = [0; 1];
-            if track_any_err!(reader.read(&mut peek))? == 0 {
-                break;
-            }
+        let mut magic_cookie = vec![0; MAGIC_COOKIE.len()];
+        track_any_err!(reader.read_exact(&mut magic_cookie))?;
+        track_assert_eq!(
+            str::from_utf8(&magic_cookie).ok(),
+            Some(MAGIC_COOKIE),
+            Failed
+        );
+        let count = track_any_err!(reader.read_u32::<BigEndian>())?;
 
-            let mut reader = peek.chain(&mut reader);
+        let mut models = HashMap::with_capacity(count as usize);
+        for _ in 0..count {
             let spec = track!(ModelSpec::from_reader(&mut reader))?;
             let stats = track!(ModelStats::from_reader(&mut reader))?;
             models.insert(spec, stats);
