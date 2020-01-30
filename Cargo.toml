@@ -15,12 +15,12 @@ travis-ci = {repository = "sile/nasbench-rs"}
 codecov = {repository = "sile/nasbench-rs"}
 
 [dependencies]
-base64 = "0.10"
+base64 = "0.11"
 bytecodec = "0.4"
 byteorder = "1"
 crc = "1"
-md5 = "0.6"
+md5 = "0.7"
 protobuf_codec = "0.2"
 serde_json = "1"
-structopt = "0.2"
+structopt = "0.3"
 trackable = "0.2"
