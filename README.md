@@ -26,7 +26,7 @@ Examples
 First of all, you have to convert a NASBench dataset to this crate's format as follows:
 ```console
 $ wget https://storage.googleapis.com/nasbench/nasbench_full.tfrecord
-$ nasbench nasbench_full.tfrecord nasbench_full.bin
+$ nasbench convert nasbench_full.tfrecord nasbench_full.bin
 $ ls -lh
 -rw-rw-rw- 1 foo foo 328M May 12 16:47 nasbench_full.bin
 -rw-rw-rw- 1 foo foo 2.0G May 12 16:45 nasbench_full.tfrecord
