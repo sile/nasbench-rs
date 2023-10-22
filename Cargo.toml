@@ -18,9 +18,9 @@ codecov = {repository = "sile/nasbench-rs"}
 base64 = "0.11"
 bytecodec = "0.4"
 byteorder = "1"
+clap = { version = "4.4.6", features = ["derive"] }
 crc = "1"
 md5 = "0.7"
 protobuf_codec = "0.2"
 serde_json = "1"
-structopt = "0.3"
 trackable = "0.2"

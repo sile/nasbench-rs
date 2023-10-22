@@ -1,49 +1,48 @@
 #[macro_use]
 extern crate trackable;
 
+use clap::Parser;
 use nasbench::{AdjacencyMatrix, ModelSpec, NasBench, Op};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
-use structopt::StructOpt;
 use trackable::error::Failed;
 use trackable::result::MainResult;
 
-#[derive(Debug, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
+#[derive(Debug, Parser)]
 enum Opt {
-    #[structopt(about = "Converts tfrecord format dataset to more compact binary format")]
+    #[clap(about = "Converts tfrecord format dataset to more compact binary format")]
     Convert {
         tfrecord_format_dataset_path: PathBuf,
         binary_format_dataset_path: PathBuf,
 
-        #[structopt(long)]
+        #[clap(long)]
         validate_module_hash: bool,
     },
 
-    #[structopt(about = "Queris evaluation metrics of a model")]
+    #[clap(about = "Queris evaluation metrics of a model")]
     Query {
         dataset_path: PathBuf,
 
-        #[structopt(long, default_value = "108")]
+        #[clap(long, default_value = "108")]
         epochs: u8,
 
-        #[structopt(long)]
+        #[clap(long)]
         ops: Vec<Op>,
 
-        #[structopt(long)]
+        #[clap(long)]
         adjacency: AdjacencyMatrix,
 
-        #[structopt(long)]
+        #[clap(long)]
         stop_halfway: bool,
 
-        #[structopt(long, default_value = "0")]
+        #[clap(long, default_value = "0")]
         sample_index: usize,
     },
 }
 
 fn main() -> MainResult {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     match opt {
         Opt::Convert {
             tfrecord_format_dataset_path,

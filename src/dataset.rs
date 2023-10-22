@@ -88,7 +88,7 @@ impl NasBench {
                 track!(record.spec.validate_module_hash(); record)?;
             }
 
-            let mut model = models.entry(record.spec.clone()).or_default();
+            let model = models.entry(record.spec.clone()).or_default();
             model.trainable_parameters = record.metrics.trainable_parameters as u32;
 
             let epoch_stats = EpochStats {
